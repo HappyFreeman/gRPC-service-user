@@ -4,12 +4,14 @@ import (
 	"context"
 	pb "github.com/HappyFreeman/gRPC-service-user/internal/proto/gen"
 	"github.com/HappyFreeman/gRPC-service-user/internal/repo"
+	"github.com/HappyFreeman/gRPC-service-user/pkg/jwt"
 	"github.com/HappyFreeman/gRPC-service-user/pkg/validator"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"strconv"
+	"time"
 )
 
 // Слой бизнес-логики. Тут должна быть основная логика сервиса
@@ -82,6 +84,15 @@ func (s *service) Login(ctx context.Context, request *pb.LoginRequest) (*pb.Logi
 		return nil, status.Error(codes.NotFound, "invalid username or password")
 	}
 
-	return &pb.LoginResponse{Token: "token"}, nil
+	// Создание токена
+	//TODO: вынести в конфиг время жизни токена
+	token, err := jwt.NewToken(user, time.Hour)
+
+	if err != nil {
+		s.log.Errorf("failed to create token: %s", err)
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &pb.LoginResponse{Token: token}, nil
 
 }

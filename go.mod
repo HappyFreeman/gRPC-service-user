@@ -5,7 +5,9 @@ go 1.23.0
 toolchain go1.23.6
 
 require (
+	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/go-playground/validator v9.31.0+incompatible
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/joho/godotenv v1.5.1
 	github.com/kelseyhightower/envconfig v1.4.0
