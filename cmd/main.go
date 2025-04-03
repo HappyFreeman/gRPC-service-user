@@ -45,7 +45,7 @@ func main() {
 	}
 
 	// Создание сервиса с бизнес-логикой
-	serviceInstance := service.NewService(repository, logger)
+	serviceInstance := service.NewService(repository, logger, cfg.JWT)
 
 	//подключение gRPC-сервера.
 	server := grpc.NewServer()

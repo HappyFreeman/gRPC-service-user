@@ -7,6 +7,9 @@ option go_package = "github.com/HappyFreeman/gRPC-service-user;authv1";
 service AuthService {
   rpc Register (RegisterRequest) returns (RegisterResponse);
   rpc Login (LoginRequest) returns (LoginResponse);
+  rpc ChangePassword (ChangePasswordRequest) returns (ChangePasswordResponse);
+
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
 }
 
 message RegisterRequest {
@@ -25,4 +28,22 @@ message LoginRequest {
 
 message LoginResponse {
   string token = 1;
+}
+
+message ChangePasswordRequest {
+  string username = 1;
+  string oldPassword = 2;
+  string newPassword = 3;
+}
+
+message ChangePasswordResponse {
+  string message = 1;
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  string message = 1;
 }

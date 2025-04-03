@@ -13,7 +13,8 @@ import (
 
 const (
 	insertUserQuery = `INSERT INTO users (name, password) VALUES ($1, $2) RETURNING id;`
-	getUserByName   = `SELECT name, password FROM users WHERE name = $1;`
+	getUserByName   = `SELECT id, name, password FROM users WHERE name = $1;`
+	changePassword  = `UPDATE users SET password = $2, updated_at = now() WHERE name = $1;`
 )
 
 type repository struct {
@@ -24,6 +25,7 @@ type repository struct {
 type Repository interface {
 	CreateUser(ctx context.Context, user User) (int, error)
 	GetUserByName(ctx context.Context, name string) (User, error)
+	ChangePassword(ctx context.Context, user User) error
 }
 
 func NewRepository(ctx context.Context, cfg config.PostgreSQL) (Repository, error) {
@@ -74,11 +76,22 @@ func (r *repository) CreateUser(ctx context.Context, user User) (int, error) {
 func (r *repository) GetUserByName(ctx context.Context, name string) (User, error) {
 	var user User
 
-	err := r.pool.QueryRow(ctx, getUserByName, name).Scan(&user.Name, &user.Password)
+	err := r.pool.QueryRow(ctx, getUserByName, name).Scan(&user.ID, &user.Name, &user.Password)
 
 	if err != nil {
 		return User{}, errors.Wrap(err, "failed to get user by name")
 	}
 
 	return user, nil
+}
+
+func (r *repository) ChangePassword(ctx context.Context, user User) error {
+
+	_, err := r.pool.Exec(ctx, changePassword, user.Name, user.Password)
+
+	if err != nil {
+		return errors.Wrap(err, "failed to change password")
+	}
+
+	return nil
 }

@@ -8,9 +8,14 @@ import (
 
 type AppConfig struct {
 	LogLevel   string
-	TokenTTL   time.Duration `envconfig:"TOKEN_TTL" default:"1h"`
 	GRPC       GRPC
 	PostgreSQL PostgreSQL
+	JWT        JWT
+}
+
+type JWT struct {
+	Secret string        `envconfig:"JWT_SECRET" required:"true"`
+	TTL    time.Duration `envconfig:"JWT_TTL" default:"20m"`
 }
 
 type GRPC struct {
