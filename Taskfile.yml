@@ -1,0 +1,11 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  generate:
+    aliases:
+      - gen
+    desc: "Generate code from proto files"
+    cmds:
+      - protoc -I grpc/proto grpc/proto/*.proto --go_out=./grpc/genproto/ --go_opt=paths=source_relative --go-grpc_out=./grpc/genproto/ --go-grpc_opt=paths=source_relative
