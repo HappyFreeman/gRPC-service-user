@@ -1,75 +1,151 @@
 package jwt
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
-	"github.com/HappyFreeman/gRPC-service-user/internal/config"
-	"github.com/HappyFreeman/gRPC-service-user/internal/repo"
+	"fmt"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/rs/zerolog/log"
+	"os"
 	"time"
 )
 
-func NewToken(user repo.User, cfgJWT config.JWT) (string, error) {
-	token := jwt.New(jwt.SigningMethodHS256)
+type JWTClient interface {
+	CreateToken(params *CreateTokenParams) (*CreateTokenResponse, error)
+	ValidateToken(params *ValidateTokenParams) (bool, error)
+	GetDataFromToken(params *GetDataFromTokenParams) (*GetDataFromTokenResponse, error)
+}
 
-	claims := token.Claims.(jwt.MapClaims)
-	claims["exp"] = time.Now().Add(cfgJWT.TTL).Unix()
-	claims["id"] = user.ID
-	claims["name"] = user.Name
+type jwtClient struct {
+	privateKey       *rsa.PrivateKey
+	publicKey        *rsa.PublicKey
+	accessTokenTime  time.Duration
+	refreshTokenTime time.Duration
+}
 
-	// Подписываем токен
-	tokenString, err := token.SignedString([]byte(cfgJWT.Secret))
+func NewJWTClient(
+	privateKey *rsa.PrivateKey,
+	publicKey *rsa.PublicKey,
+	accessTokenTime time.Duration,
+	refreshTokenTime time.Duration,
+) *jwtClient {
+	return &jwtClient{
+		privateKey:       privateKey,
+		publicKey:        publicKey,
+		accessTokenTime:  accessTokenTime,
+		refreshTokenTime: refreshTokenTime,
+	}
+}
+
+func (a *jwtClient) CreateToken(params *CreateTokenParams) (*CreateTokenResponse, error) {
+	accessToken, err := a.newToken(params, a.accessTokenTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create access token: %w", err)
+	}
+
+	refreshToken, err := a.newToken(params, a.refreshTokenTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create refresh token: %w", err)
+	}
+
+	return &CreateTokenResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}, nil
+}
+
+func (a *jwtClient) ValidateToken(params *ValidateTokenParams) (bool, error) {
+	token, err := jwt.Parse(params.Token, func(token *jwt.Token) (interface{}, error) {
+		return a.publicKey, nil
+	})
 
 	if err != nil {
+		return false, err
+	}
+
+	if _, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		expirationTime := token.Claims.(jwt.MapClaims)["exp"].(float64)
+		if int64(expirationTime) > time.Now().Unix() {
+			return true, nil
+		}
+	}
+	return false, err
+}
+
+func (a *jwtClient) GetDataFromToken(params *GetDataFromTokenParams) (*GetDataFromTokenResponse, error) {
+
+	token, err := jwt.Parse(params.Token, func(token *jwt.Token) (interface{}, error) {
+		return a.publicKey, nil
+	})
+	if err != nil {
+		if err.Error() != "Token is expired" {
+			return nil, err
+		}
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		userIdClaims, ok1 := claims["userId"].(float64)
+
+		if !ok1 {
+			log.Error().Fields(map[string]bool{
+				"userIdIsCasted": ok1,
+			}).Msgf("failed to validate token")
+
+			return nil, fmt.Errorf("invalid token claims")
+		}
+
+		return &GetDataFromTokenResponse{
+			UserId: int64(userIdClaims),
+		}, nil
+	}
+	return nil, errors.New("invalid signing method")
+}
+
+func (a *jwtClient) CreateTokenId(params *CreateTokenParams) (string, error) {
+
+	privateKey, err := readPrivateKey()
+	if err != nil {
 		return "", err
+	}
+	accessToken := jwt.New(jwt.SigningMethodRS256)
+
+	claims := accessToken.Claims.(jwt.MapClaims)
+	claims["userId"] = params.UserId
+	accessTokenString, err := accessToken.SignedString(privateKey)
+	if err != nil {
+		return "", err
+	}
+	return accessTokenString, nil
+}
+
+func (a *jwtClient) newToken(params *CreateTokenParams, lt time.Duration) (string, error) {
+	token := jwt.New(jwt.SigningMethodRS256)
+	token.Claims = jwt.MapClaims{
+		"exp":    time.Now().Add(lt).Unix(),
+		"userId": params.UserId,
+	}
+
+	tokenString, err := token.SignedString(a.privateKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to create signed string from token: %w", err)
 	}
 
 	return tokenString, nil
 }
 
-// GetUserId Получение ID пользователя из токена
-func GetUserId(tokenString string, secret string) (int, error) {
-	claims, err := validateToken(tokenString, secret)
+func readPrivateKey() (*rsa.PrivateKey, error) {
+	privateKeyBytes, err := os.ReadFile("private.pem")
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	// Читаем ID пользователя
-	idFloat, ok := claims["id"].(float64)
-	if !ok {
-		return 0, errors.New("invalid token id type")
+	block, _ := pem.Decode(privateKeyBytes)
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
 	}
 
-	return int(idFloat), nil
-}
-
-// validateToken Приватный метод для проверки токена
-func validateToken(tokenString string, secret string) (jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Проверяем, что метод подписи — HMAC SHA256
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("invalid signing method")
-		}
-		return []byte(secret), nil
-	})
-
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-
-	// Проверяем claims
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, errors.New("invalid token claims")
-	}
-
-	// Проверяем срок действия токена
-	exp, ok := claims["exp"].(float64)
-	if !ok {
-		return nil, errors.New("invalid token exp type")
-	}
-	if time.Now().Unix() > int64(exp) {
-		return nil, errors.New("token expired")
-	}
-
-	return claims, nil
+	return privateKey, nil
 }

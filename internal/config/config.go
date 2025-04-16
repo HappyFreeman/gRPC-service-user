@@ -10,19 +10,18 @@ type AppConfig struct {
 	LogLevel   string
 	GRPC       GRPC
 	PostgreSQL PostgreSQL
-	JWT        JWT
+	System     System
 }
 
-type JWT struct {
-	Secret string        `envconfig:"JWT_SECRET" required:"true"`
-	TTL    time.Duration `envconfig:"JWT_TTL" default:"20m"`
+type System struct {
+	NumberPasswordAttempts int64         `envconfig:"NUMBER_PASSWORD_ATTEMPTS" default:"5"`
+	LockPasswordEntry      time.Duration `envconfig:"LOCK_PASSWORD_ENTRY" default:"5m"`
+	AccessTokenTimeout     time.Duration `envconfig:"ACCESS_TOKEN_TIMEOUT" default:"15m"`
+	RefreshTokenTimeout    time.Duration `envconfig:"REFRESH_TOKEN_TIMEOUT" default:"15m"`
 }
 
 type GRPC struct {
-	ListenAddress string        `envconfig:"PORT" required:"true"`
-	WriteTimeout  time.Duration `envconfig:"WRITE_TIMEOUT" required:"true"`
-	ServerName    string        `envconfig:"SERVER_NAME" required:"true"`
-	Token         string        `envconfig:"TOKEN" required:"true"`
+	ListenAddress string `envconfig:"PORT" required:"true"`
 }
 
 type PostgreSQL struct {

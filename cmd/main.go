@@ -5,6 +5,7 @@ import (
 	"github.com/HappyFreeman/gRPC-service-user/internal/config"
 	"github.com/HappyFreeman/gRPC-service-user/internal/repo"
 	"github.com/HappyFreeman/gRPC-service-user/internal/service"
+	"github.com/HappyFreeman/gRPC-service-user/pkg/jwt"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/pkg/errors"
@@ -15,7 +16,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	pb "github.com/HappyFreeman/gRPC-service-user/internal/proto/gen"
+	pb "github.com/HappyFreeman/gRPC-service-user/grpc/genproto"
 	customLogger "github.com/HappyFreeman/gRPC-service-user/pkg/logger"
 )
 
@@ -44,8 +45,19 @@ func main() {
 		log.Fatal(errors.Wrap(err, "failed to initialize repository"))
 	}
 
+	privateKey, err := jwt.ReadPrivateKey()
+	if err != nil {
+		log.Fatal("failed to read private key")
+	}
+	publicKey, err := jwt.ReadPublicKey()
+	if err != nil {
+		log.Fatal("failed to read public key")
+	}
+
+	jwt := jwt.NewJWTClient(privateKey, publicKey, cfg.System.AccessTokenTimeout, cfg.System.RefreshTokenTimeout)
+
 	// Создание сервиса с бизнес-логикой
-	serviceInstance := service.NewService(repository, logger, cfg.JWT)
+	serviceInstance := service.NewService(cfg, repository, logger, jwt)
 
 	//подключение gRPC-сервера.
 	server := grpc.NewServer()
